@@ -1,22 +1,20 @@
 <?php
-// Database Infrastructure Configuration Layout
-$host    = '127.0.0.1';         
-$db      = 'njuguna_repair_dp_v2'; // Your exact container name from phpMyAdmin
-$user    = 'root';              
-$pass    = '';                  
-$charset = 'utf8mb4';           
-
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, 
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       
-    PDO::ATTR_EMULATE_PREPARES   => false,                  
-];
+$host = getenv('DB_HOST') ?: 'localhost';
+$port = getenv('DB_PORT') ?: '3306';
+$dbname = getenv('DB_NAME') ?: 'defaultdb';
+$username = getenv('DB_USER') ?: 'root';
+$password = getenv('DB_PASSWORD') ?: '';
 
 try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-    die("Database Connection Engine Failure: " . $e->getMessage());
+    $options = [];
+    if (getenv('DB_HOST')) {
+        $options = [PDO::MYSQL_ATTR_SSL_CA => true];
+    }
+    
+    $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
+    $pdo = new PDO($dsn, $username, $password, $options);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
 }
 ?>
