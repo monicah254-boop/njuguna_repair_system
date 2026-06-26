@@ -1,0 +1,22 @@
+<?php
+// Database Infrastructure Configuration Layout
+$host    = '127.0.0.1';         
+$db      = 'njuguna_repair_dp_v2'; // Your exact container name from phpMyAdmin
+$user    = 'root';              
+$pass    = '';                  
+$charset = 'utf8mb4';           
+
+$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+
+$options = [
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, 
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       
+    PDO::ATTR_EMULATE_PREPARES   => false,                  
+];
+
+try {
+    $pdo = new PDO($dsn, $user, $pass, $options);
+} catch (\PDOException $e) {
+    die("Database Connection Engine Failure: " . $e->getMessage());
+}
+?>
