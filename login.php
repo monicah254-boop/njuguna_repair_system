@@ -1,45 +1,27 @@
 <?php
-session_start();
-$error_msg = isset($_SESSION['error']) ? $_SESSION['error'] : "";
-unset($_SESSION['error']);
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Njuguna Electronics - Login</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #121212; color: white; height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .login-card { background-color: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 40px; width: 100%; max-width: 420px; }
-        .form-control { background-color: #2d2d2d; border: 1px solid #444; color: white; }
-        .btn-primary { background-color: #0d6efd; border: none; font-weight: 600; }
-    </style>
-</head>
-<body>
-<div class="login-card">
-    <div class="text-center mb-4">
-        <h2 style="color: #0d6efd; font-weight:700;">NJUGUNA ELECTRONICS</h2>
-        <p class="text-muted small">System Authorization Gate</p>
-    </div>
+// 1. Read connection variables from Render's environment (fallback to local XAMPP)
+$host = getenv('DB_HOST') ?: 'localhost';
+$port = getenv('DB_PORT') ?: '3306';
+$db   = getenv('DB_NAME') ?: 'defaultdb';
+$user = getenv('DB_USER') ?: 'root';
+$pass = getenv('DB_PASSWORD') ?: '';
 
-    <?php if(!empty($error_msg)): ?>
-        <div class="alert alert-danger py-2 text-center small"><?php echo $error_msg; ?></div>
-    <?php endif; ?>
+try {
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ];
+    
+    // Require SSL initialization if connecting to cloud database clusters
+    if (getenv('DB_HOST')) {
+        $options[PDO::MYSQL_ATTR_SSL_CA] = true;
+    }
+    
+    $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
+    $pdo = new PDO($dsn, $user, $pass, $options);
 
-    <form action="login_action.php" method="POST">
-        <div class="mb-3">
-            <label class="form-label small text-muted">Username</label>
-            <input type="text" class="form-control" name="username" required autocomplete="off">
-        </div>
-        <div class="mb-4">
-            <label class="form-label small text-muted">Password</label>
-            <input type="password" class="form-control" name="password" required>
-        </div>
-        <div class="d-grid">
-            <button type="submit" class="btn btn-primary py-2">Secure Authorization Login</button>
-        </div>
-    </form>
-</div>
-</body>
-</html>
+} catch (\PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
+
+// --- Rest of your original login.php interface or session initialization logic below ---
