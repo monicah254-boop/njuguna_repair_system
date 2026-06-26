@@ -12,9 +12,10 @@ try {
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ];
     
-    // Aiven cloud database clusters require SSL encryption
+    // If on Render cloud, enforce SSL encryption parameters safely
     if (getenv('DB_HOST')) {
         $options[PDO::MYSQL_ATTR_SSL_CA] = true;
+        $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
     }
     
     $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
