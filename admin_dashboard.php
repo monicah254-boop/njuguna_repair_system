@@ -1,57 +1,62 @@
 <?php
 session_start();
+
+// 1. Hook into our working cloud database connection pipeline
+require_once 'db.php';
+
+// 2. Enforce strict role validation based on your system login setup
 if (!isset($_SESSION['username']) || strtolower($_SESSION['role']) != 'admin') {
     header("Location: login.php");
     exit();
 }
 
-$host = 'localhost'; $db = 'njuguna_repair_dp_v2'; $user = 'root'; $pass = '';
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-    ]);
-} catch (\PDOException $e) { die("Database connection failed: " . $e->getMessage()); }
-
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
-// Executive Metrics
-$totalJobs = $pdo->query("SELECT COUNT(*) FROM job_cards")->fetchColumn();
-$activeCount = $pdo->query("SELECT COUNT(*) FROM job_cards WHERE status='Active' OR status='In Progress'")->fetchColumn();
-$completedCount = $pdo->query("SELECT COUNT(*) FROM job_cards WHERE status='Completed'")->fetchColumn();
+try {
+    // Executive Metrics
+    $totalJobs = $pdo->query("SELECT COUNT(*) FROM job_cards")->fetchColumn();
+    $activeCount = $pdo->query("SELECT COUNT(*) FROM job_cards WHERE status='Active' OR status='In Progress'")->fetchColumn();
+    $completedCount = $pdo->query("SELECT COUNT(*) FROM job_cards WHERE status='Completed'")->fetchColumn();
 
-// --- FEATURE 4: BUSINESS INTELLIGENCE PREDICTIVE INVENTORY AUDIT ---
-$lowStockAlerts = [];
-$invQuery = $pdo->query("SELECT * FROM inventory");
-while ($item = $invQuery->fetch()) {
-    $itemLower = array_change_key_case($item, CASE_LOWER);
-    $qty = isset($itemLower['quantity']) ? intval($itemLower['quantity']) : 0;
-    $name = isset($itemLower['part_name']) ? $itemLower['part_name'] : 'Component';
-    
-    // Predictive Engine Check: Trigger warning flag if quantity falls beneath safety barrier (3 units)
-    if ($qty <= 3) {
-        $lowStockAlerts[] = [
-            'name' => $name,
-            'qty' => $qty,
-            'status' => ($qty === 0) ? 'CRITICAL CRISIS (0 Left)' : 'Predictive Risk (Low Stock)'
-        ];
+    // --- FEATURE 4: BUSINESS INTELLIGENCE PREDICTIVE INVENTORY AUDIT ---
+    $lowStockAlerts = [];
+    $invQuery = $pdo->query("SELECT * FROM inventory");
+    while ($item = $invQuery->fetch()) {
+        $itemLower = array_change_key_case($item, CASE_LOWER);
+        $qty = isset($itemLower['quantity']) ? intval($itemLower['quantity']) : 0;
+        $name = isset($itemLower['part_name']) ? $itemLower['part_name'] : 'Component';
+        
+        // Predictive Engine Check: Trigger warning flag if quantity falls beneath safety barrier (3 units)
+        if ($qty <= 3) {
+            $lowStockAlerts[] = [
+                'name' => $name,
+                'qty' => $qty,
+                'status' => ($qty === 0) ? 'CRITICAL CRISIS (0 Left)' : 'Predictive Risk (Low Stock)'
+            ];
+        }
     }
-}
 
-// --- FAIL-SAFE ADAPTIVE COLUMN DETECTION FOR LEADERBOARD ---
-$testStmt = $pdo->query("SELECT * FROM job_cards LIMIT 1");
-$rowSample = $testStmt->fetch();
-$techKey = "";
-if ($rowSample) {
-    if (array_key_exists('technician_assigned', $rowSample)) $techKey = 'technician_assigned';
-    elseif (array_key_exists('technician', $rowSample)) $techKey = 'technician';
-    elseif (array_key_exists('assigned_to', $rowSample)) $techKey = 'assigned_to';
-}
+    // --- FAIL-SAFE ADAPTIVE COLUMN DETECTION FOR LEADERBOARD ---
+    $testStmt = $pdo->query("SELECT * FROM job_cards LIMIT 1");
+    $rowSample = $testStmt->fetch();
+    $techKey = "";
+    if ($rowSample) {
+        if (array_key_exists('technician_assigned', $rowSample)) $techKey = 'technician_assigned';
+        elseif (array_key_exists('technician', $rowSample)) $techKey = 'technician';
+        elseif (array_key_exists('assigned_to', $rowSample)) $techKey = 'assigned_to';
+    }
 
-if (!empty($techKey)) {
-    $techLogs = $pdo->query("SELECT $techKey as technician_assigned, COUNT(*) as total_done FROM job_cards WHERE status='Completed' GROUP BY $techKey ORDER BY total_done DESC");
-} else {
-    $techLogs = $pdo->query("SELECT 'Staff' as technician_assigned, COUNT(*) as total_done FROM job_cards WHERE status='Completed' LIMIT 0");
+    if (!empty($techKey)) {
+        $techLogs = $pdo->query("SELECT $techKey as technician_assigned, COUNT(*) as total_done FROM job_cards WHERE status='Completed' GROUP BY $techKey ORDER BY total_done DESC");
+    } else {
+        $techLogs = $pdo->query("SELECT 'Staff' as technician_assigned, COUNT(*) as total_done FROM job_cards WHERE status='Completed' LIMIT 0");
+    }
+} catch (\PDOException $e) {
+    // Fail gracefully if tables like inventory haven't been created/seeded yet
+    $totalJobs = $totalJobs ?? 0;
+    $activeCount = $activeCount ?? 0;
+    $completedCount = $completedCount ?? 0;
+    $lowStockAlerts = [];
 }
 ?>
 <!DOCTYPE html>
@@ -120,13 +125,15 @@ if (!empty($techKey)) {
                 <ul class="list-group list-group-flush small">
                     <?php
                     $rank = 1;
-                    while ($tech = $techLogs->fetch()) {
-                        $name = !empty($tech['technician_assigned']) ? htmlspecialchars($tech['technician_assigned']) : 'Unassigned';
-                        echo "<li class='list-group-item d-flex justify-content-between align-items-center px-0'>";
-                        echo "<div><span class='badge bg-dark me-2'>#{$rank}</span> <b>{$name}</b></div>";
-                        echo "<span class='badge bg-success rounded-pill'>{$tech['total_done']} Solved</span>";
-                        echo "</li>";
-                        $rank++;
+                    if (isset($techLogs) && $techLogs) {
+                        while ($tech = $techLogs->fetch()) {
+                            $name = !empty($tech['technician_assigned']) ? htmlspecialchars($tech['technician_assigned']) : 'Unassigned';
+                            echo "<li class='list-group-item d-flex justify-content-between align-items-center px-0'>";
+                            echo "<div><span class='badge bg-dark me-2'>#{$rank}</span> <b>{$name}</b></div>";
+                            echo "<span class='badge bg-success rounded-pill'>{$tech['total_done']} Solved</span>";
+                            echo "</li>";
+                            $rank++;
+                        }
                     }
                     if ($rank == 1) { echo "<p class='text-muted small my-2'>No active metrics found.</p>"; }
                     ?>
@@ -160,32 +167,36 @@ if (!empty($techKey)) {
                     </thead>
                     <tbody>
                         <?php
-                        if (!empty($search)) {
-                            $stmt = $pdo->prepare("SELECT * FROM job_cards WHERE customer_name LIKE ? OR device_model LIKE ? ORDER BY created_at DESC");
-                            $stmt->execute(["%$search%", "%$search%"]);
-                        } else {
-                            $stmt = $pdo->query("SELECT * FROM job_cards ORDER BY created_at DESC");
-                        }
-                        
-                        while ($row = $stmt->fetch()) {
-                            $rowLower = array_change_key_case($row, CASE_LOWER);
-                            $displayId = $rowLower['job_id'];
-                            $displayPart = !empty($rowLower['allocated_part_id']) ? "#" . $rowLower['allocated_part_id'] : 'None';
-                            $techDisplay = !empty($techKey) && isset($rowLower[$techKey]) ? $rowLower[$techKey] : 'Staff';
+                        try {
+                            if (!empty($search)) {
+                                $stmt = $pdo->prepare("SELECT * FROM job_cards WHERE customer_name LIKE ? OR device_model LIKE ? ORDER BY created_at DESC");
+                                $stmt->execute(["%$search%", "%$search%"]);
+                            } else {
+                                $stmt = $pdo->query("SELECT * FROM job_cards ORDER BY created_at DESC");
+                            }
                             
-                            $statusText = $rowLower['status'] ?? 'In Progress';
-                            $badgeClass = 'bg-warning text-dark';
-                            if (strtolower($statusText) == 'completed') $badgeClass = 'bg-success';
-                            if (strtolower($statusText) == 'pending') $badgeClass = 'bg-secondary';
-                            
-                            echo "<tr>";
-                            echo "<td><b>#{$displayId}</b></td>";
-                            echo "<td>" . htmlspecialchars($rowLower['customer_name'] ?? 'Walk-in') . "</td>";
-                            echo "<td><span class='fw-semibold text-primary'>" . htmlspecialchars($rowLower['device_model'] ?? 'Unknown') . "</span></td>";
-                            echo "<td>" . htmlspecialchars($displayPart) . "</td>";
-                            echo "<td><span class='badge bg-light text-dark border'>{$techDisplay}</span></td>";
-                            echo "<td class='text-center'><span class='badge {$badgeClass}'>" . ucfirst($statusText) . "</span></td>";
-                            echo "</tr>";
+                            while ($row = $stmt->fetch()) {
+                                $rowLower = array_change_key_case($row, CASE_LOWER);
+                                $displayId = $rowLower['job_id'];
+                                $displayPart = !empty($rowLower['allocated_part_id']) ? "#" . $rowLower['allocated_part_id'] : 'None';
+                                $techDisplay = !empty($techKey) && isset($rowLower[$techKey]) ? $rowLower[$techKey] : 'Staff';
+                                
+                                $statusText = $rowLower['status'] ?? 'In Progress';
+                                $badgeClass = 'bg-warning text-dark';
+                                if (strtolower($statusText) == 'completed') $badgeClass = 'bg-success';
+                                if (strtolower($statusText) == 'pending') $badgeClass = 'bg-secondary';
+                                
+                                echo "<tr>";
+                                echo "<td><b>#{$displayId}</b></td>";
+                                echo "<td>" . htmlspecialchars($rowLower['customer_name'] ?? 'Walk-in') . "</td>";
+                                echo "<td><span class='fw-semibold text-primary'>" . htmlspecialchars($rowLower['device_model'] ?? 'Unknown') . "</span></td>";
+                                echo "<td>" . htmlspecialchars($displayPart) . "</td>";
+                                echo "<td><span class='badge bg-light text-dark border'>{$techDisplay}</span></td>";
+                                echo "<td class='text-center'><span class='badge {$badgeClass}'>" . ucfirst($statusText) . "</span></td>";
+                                echo "</tr>";
+                            }
+                        } catch (\PDOException $e) {
+                            echo "<tr><td colspan='6' class='text-center text-muted small py-3'>No logs available or table missing initialization.</td></tr>";
                         }
                         ?>
                     </tbody>
