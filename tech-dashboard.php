@@ -1,17 +1,14 @@
 <?php
 session_start();
+
+// 1. Hook into our working cloud database connection pipeline
+require_once 'db.php';
+
+// 2. Validate session roles to ensure only logged-in technicians gain entry
 if (!isset($_SESSION['username']) || strtolower($_SESSION['role']) != 'technician') {
     header("Location: login.php");
     exit();
 }
-
-$host = 'localhost'; $db = 'njuguna_repair_dp_v2'; $user = 'root'; $pass = '';
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-    ]);
-} catch (\PDOException $e) { die("Database connection failed: " . $e->getMessage()); }
 
 $msg = "";
 
@@ -24,17 +21,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['open_jobcard'])) {
     $part_id = intval($_POST['assigned_part_id']);
 
     if (!empty($customer) && !empty($phone) && !empty($device)) {
-        
-        // Handle inventory reduction if a part ID was allocated
-        if ($part_id > 0) {
-            $uStmt = $pdo->prepare("UPDATE inventory SET quantity = quantity - 1 WHERE part_id = ? AND quantity > 0");
-            $uStmt->execute([$part_id]);
-        }
-
-        // Exact structured insertion string matching your DB table layout columns
-        $sqlInsert = "INSERT INTO job_cards (customer_name, customer_phone, device_model, problem_description, allocated_part_id, status) VALUES (?, ?, ?, ?, ?, 'In Progress')";
-        
         try {
+            // Handle inventory reduction if a part ID was allocated
+            if ($part_id > 0) {
+                $uStmt = $pdo->prepare("UPDATE inventory SET quantity = quantity - 1 WHERE part_id = ? AND quantity > 0");
+                $uStmt->execute([$part_id]);
+            }
+
+            // Exact structured insertion string matching your DB table layout columns
+            $sqlInsert = "INSERT INTO job_cards (customer_name, customer_phone, device_model, problem_description, allocated_part_id, status) VALUES (?, ?, ?, ?, ?, 'In Progress')";
+            
             $stmt = $pdo->prepare($sqlInsert);
             // If part_id is 0, pass NULL to respect the structural integer field
             $stmt->execute([$customer, $phone, $device, $issue_input, ($part_id > 0 ? $part_id : null)]);
@@ -49,61 +45,65 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['open_jobcard'])) {
 
 // Handle Closing a Job Card + LIVE SMS Gateway Trigger
 if (isset($_GET['close_id'])) {
-    $job_id = $_GET['close_id'];
+    $job_id = intval($_GET['close_id']);
 
-    // Fetch details to get the custom mobile number saved in the row
-    $nStmt = $pdo->prepare("SELECT customer_name, customer_phone, device_model FROM job_cards WHERE job_id = ?");
-    $nStmt->execute([$job_id]);
-    $jobDetails = $nStmt->fetch();
+    try {
+        // Fetch details to get the custom mobile number saved in the row
+        $nStmt = $pdo->prepare("SELECT customer_name, customer_phone, device_model FROM job_cards WHERE job_id = ?");
+        $nStmt->execute([$job_id]);
+        $jobDetails = $nStmt->fetch();
 
-    $stmt = $pdo->prepare("UPDATE job_cards SET status = 'Completed' WHERE job_id = ?");
-    $stmt->execute([$job_id]);
+        $stmt = $pdo->prepare("UPDATE job_cards SET status = 'Completed' WHERE job_id = ?");
+        $stmt->execute([$job_id]);
 
-    if ($jobDetails) {
-        $c_name = htmlspecialchars($jobDetails['customer_name']);
-        $d_model = htmlspecialchars($jobDetails['device_model']);
-        
-        // Grab the actual customer phone number from your database dynamically!
-        $raw_phone = trim($jobDetails['customer_phone']);
-        // Format it instantly to international style for Africa's Talking gateway (+254...)
-        $customer_phone = (substr($raw_phone, 0, 1) == '0') ? '+254' . substr($raw_phone, 1) : $raw_phone;
-        
-        $sms_message = "Hello " . $c_name . ", your device (" . $d_model . ") has been successfully repaired and is ready for collection at Njuguna Electronics. Thank you!";
+        if ($jobDetails) {
+            $c_name = htmlspecialchars($jobDetails['customer_name']);
+            $d_model = htmlspecialchars($jobDetails['device_model']);
+            
+            // Grab the actual customer phone number from your database dynamically!
+            $raw_phone = trim($jobDetails['customer_phone']);
+            // Format it instantly to international style for Africa's Talking gateway (+254...)
+            $customer_phone = (substr($raw_phone, 0, 1) == '0') ? '+254' . substr($raw_phone, 1) : $raw_phone;
+            
+            $sms_message = "Hello " . $c_name . ", your device (" . $d_model . ") has been successfully repaired and is ready for collection at Njuguna Electronics. Thank you!";
 
-        // --- AFRICA'S TALKING LIVE SMS GATEWAY INTEGRATION ---
-        $username = "sandbox"; 
-        $apiKey   = "atsk_7568c2ed76556ae8e4722ab09566b3a17dee150fb6a6a0324e8ca9a8b01404acfba3cd30"; 
+            // --- AFRICA'S TALKING LIVE SMS GATEWAY INTEGRATION ---
+            $username = "sandbox"; 
+            $apiKey   = "atsk_7568c2ed76556ae8e4722ab09566b3a17dee150fb6a6a0324e8ca9a8b01404acfba3cd30"; 
 
-        $url = "https://api.sandbox.africastalking.com/version1/messaging";
+            $url = "https://api.sandbox.africastalking.com/version1/messaging";
 
-        $data = [
-            'username' => $username,
-            'to'       => $customer_phone,
-            'message'  => $sms_message
-        ];
+            $data = [
+                'username' => $username,
+                'to'       => $customer_phone,
+                'message'  => $sms_message
+            ];
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Accept: application/json",
-            "ApiKey: " . $apiKey
-        ]);
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Accept: application/json",
+                "ApiKey: " . $apiKey
+            ]);
 
-        $response = curl_exec($ch);
-        curl_close($ch);
+            $response = curl_exec($ch);
+            curl_close($ch);
 
-        $msg = "
-        <div class='alert alert-success py-3 shadow-sm text-start'>
-            <h6 class='fw-bold mb-1 text-success'><i class='bi bi-phone-vibrate'></i> Live SMS Dispatched via Africa's Talking Gateway!</h6>
-            <div class='p-2 bg-white rounded border border-success font-monospace small text-dark'>
-                <b>Sent To:</b> " . $customer_phone . "<br>
-                <b>Gateway Response Status:</b> Network Request Dispatched Successfully.<br>
-                <b>Message Content:</b> " . $sms_message . "
-            </div>
-        </div>";
+            $msg = "
+            <div class='alert alert-success py-3 shadow-sm text-start'>
+                <h6 class='fw-bold mb-1 text-success'><i class='bi bi-phone-vibrate'></i> Live SMS Dispatched via Africa's Talking Gateway!</h6>
+                <div class='p-2 bg-white rounded border border-success font-monospace small text-dark'>
+                    <b>Sent To:</b> " . $customer_phone . "<br>
+                    <b>Gateway Response Status:</b> Network Request Dispatched Successfully.<br>
+                    <b>Message Content:</b> " . $sms_message . "
+                </div>
+            </div>";
+        }
+    } catch (\PDOException $err) {
+        $msg = "<div class='alert alert-danger py-2 small'>Database Error: " . htmlspecialchars($err->getMessage()) . "</div>";
     }
 }
 ?>
@@ -162,16 +162,20 @@ if (isset($_GET['close_id'])) {
                             <select class="form-select bg-light" name="assigned_part_id">
                                 <option value="0">No parts required (Service Only)</option>
                                 <?php
-                                $invStmt = $pdo->query("SELECT * FROM inventory");
-                                while ($item = $invStmt->fetch()) {
-                                    $itemLower = array_change_key_case($item, CASE_LOWER);
-                                    $p_id    = current(array_slice($itemLower, 0, 1)); 
-                                    $p_name  = isset($itemLower['part_name']) ? $itemLower['part_name'] : next($itemLower);
-                                    $p_qty   = isset($itemLower['quantity']) ? intval($itemLower['quantity']) : 0; 
+                                try {
+                                    $invStmt = $pdo->query("SELECT * FROM inventory");
+                                    while ($item = $invStmt->fetch()) {
+                                        $itemLower = array_change_key_case($item, CASE_LOWER);
+                                        $p_id    = current(array_slice($itemLower, 0, 1)); 
+                                        $p_name  = isset($itemLower['part_name']) ? $itemLower['part_name'] : next($itemLower);
+                                        $p_qty   = isset($itemLower['quantity']) ? intval($itemLower['quantity']) : 0; 
 
-                                    if ($p_qty > 0) {
-                                        echo "<option value='{$p_id}'>" . htmlspecialchars($p_name) . " ({$p_qty} available)</option>";
+                                        if ($p_qty > 0) {
+                                            echo "<option value='{$p_id}'>" . htmlspecialchars($p_name) . " ({$p_qty} available)</option>";
+                                        }
                                     }
+                                } catch (\PDOException $e) {
+                                    // Quietly bypass option rendering if inventory tracking structure isn't setup
                                 }
                                 ?>
                             </select>
@@ -197,31 +201,36 @@ if (isset($_GET['close_id'])) {
                     </thead>
                     <tbody>
                         <?php
-                        $stmt = $pdo->query("SELECT * FROM job_cards ORDER BY created_at DESC");
-                        while ($row = $stmt->fetch()) {
-                            $displayId = $row['job_id'];
-                            $displayPart = !empty($row['allocated_part_id']) ? "#" . $row['allocated_part_id'] : 'None';
-                            $statusText = $row['status'] ?? 'In Progress';
-                            
-                            $badgeClass = 'bg-warning text-dark';
-                            if (strtolower($statusText) == 'completed') $badgeClass = 'bg-success';
-                            if (strtolower($statusText) == 'pending') $badgeClass = 'bg-secondary';
-                            
-                            echo "<tr>";
-                            echo "<td><b>#{$displayId}</b></td>";
-                            echo "<td><span class='fw-semibold'>" . htmlspecialchars($row['device_model'] ?? 'Unknown') . "</span></td>";
-                            echo "<td><span class='badge bg-light text-dark border'>{$displayPart}</span></td>";
-                            echo "<td><span class='badge {$badgeClass}'>" . ucfirst($statusText) . "</span></td>";
-                            echo "<td class='text-center'>";
-                            
-                            if (strtolower($statusText) != 'completed') {
-                                echo "<a href='tech-dashboard.php?close_id={$displayId}' class='btn btn-success btn-sm py-1 px-2 fw-semibold' style='font-size:11px;'>Close Job</a>";
-                            } else {
-                                echo "<span class='text-muted small'>Archived</span>";
+                        try {
+                            $stmt = $pdo->query("SELECT * FROM job_cards ORDER BY created_at DESC");
+                            while ($row = $stmt->fetch()) {
+                                $rowLower = array_change_key_case($row, CASE_LOWER);
+                                $displayId = $rowLower['job_id'];
+                                $displayPart = !empty($rowLower['allocated_part_id']) ? "#" . $rowLower['allocated_part_id'] : 'None';
+                                $statusText = $rowLower['status'] ?? 'In Progress';
+                                
+                                $badgeClass = 'bg-warning text-dark';
+                                if (strtolower($statusText) == 'completed') $badgeClass = 'bg-success';
+                                if (strtolower($statusText) == 'pending') $badgeClass = 'bg-secondary';
+                                
+                                echo "<tr>";
+                                echo "<td><b>#{$displayId}</b></td>";
+                                echo "<td><span class='fw-semibold'>" . htmlspecialchars($rowLower['device_model'] ?? 'Unknown') . "</span></td>";
+                                echo "<td><span class='badge bg-light text-dark border'>{$displayPart}</span></td>";
+                                echo "<td><span class='badge {$badgeClass}'>" . ucfirst($statusText) . "</span></td>";
+                                echo "<td class='text-center'>";
+                                
+                                if (strtolower($statusText) != 'completed') {
+                                    echo "<a href='tech-dashboard.php?close_id={$displayId}' class='btn btn-success btn-sm py-1 px-2 fw-semibold' style='font-size:11px;'>Close Job</a>";
+                                } else {
+                                    echo "<span class='text-muted small'>Archived</span>";
+                                }
+                                
+                                echo "</td>";
+                                echo "</tr>";
                             }
-                            
-                            echo "</td>";
-                            echo "</tr>";
+                        } catch (\PDOException $e) {
+                            echo "<tr><td colspan='5' class='text-center text-muted small py-3'>No tracking logs loaded or table structure error.</td></tr>";
                         }
                         ?>
                     </tbody>
