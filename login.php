@@ -1,4 +1,5 @@
 <?php
+require_once 'db.php';
 // 1. Read connection variables from Render's environment (fallback to local XAMPP)
 $host = getenv('DB_HOST') ?: 'localhost';
 $port = getenv('DB_PORT') ?: '3306';
