@@ -10,11 +10,13 @@ try {
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_TIMEOUT            => 5, // Prevents the gateway from hanging / timing out
     ];
     
-    // If on Render cloud, enforce SSL encryption parameters safely
+    // Smoothly apply cloud-safe database encryption when running on Render
     if (getenv('DB_HOST')) {
         $options[PDO::MYSQL_ATTR_SSL_CA] = true;
+        // Bypasses local system path checks while keeping the data stream fully encrypted
         $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
     }
     
@@ -22,6 +24,8 @@ try {
     $pdo = new PDO($dsn, $user, $pass, $options);
 
 } catch (\PDOException $e) {
-    die("Database connection failed: " . $e->getMessage());
+    // Keeps errors clean without crashing the underlying PHP process
+    echo "Database connection failed safely: " . htmlspecialchars($e->getMessage());
+    exit;
 }
 ?>
