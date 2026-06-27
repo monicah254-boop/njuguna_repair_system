@@ -1,18 +1,14 @@
 <?php
 session_start();
+
+// 1. Hook into our working cloud database connection pipeline
+require_once 'db.php';
+
 // STRICT SECURITY GATE: Only allow logged-in Admins to access this page
 if (!isset($_SESSION['username']) || strtolower($_SESSION['role']) != 'admin') {
     header("Location: login.php");
     exit();
 }
-
-$host = 'localhost'; $db = 'njuguna_repair_dp_v2'; $user = 'root'; $pass = '';
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-    ]);
-} catch (\PDOException $e) { die("Database connection failed: " . $e->getMessage()); }
 
 $msg = "";
 
@@ -22,23 +18,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['register_tech'])) {
     $new_pass = trim($_POST['new_password']);
 
     if (!empty($new_user) && !empty($new_pass)) {
-        // Check if the username already exists to avoid duplication anomalies
-        $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
-        $checkStmt->execute([$new_user]);
-        if ($checkStmt->fetchColumn() > 0) {
-            $msg = "<div class='alert alert-danger py-2 small'>Error: Username '{$new_user}' is already taken!</div>";
-        } else {
-            // Insert the account with 'technician' hardcoded as the structural role parameter
-            // Note: If your system uses hashing, you can use password_hash($new_pass, PASSWORD_DEFAULT) instead
-            $insertStmt = $pdo->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'technician')");
-            $insertStmt->execute([$new_user, $new_pass]);
-            
-            $msg = "<div class='alert alert-success py-2 small'>Success: Technician account '<b>{$new_user}</b>' created successfully!</div>";
+        try {
+            // Check if the username already exists to avoid duplication anomalies
+            $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+            $checkStmt->execute([$new_user]);
+            if ($checkStmt->fetchColumn() > 0) {
+                $msg = "<div class='alert alert-danger py-2 small'>Error: Username '{$new_user}' is already taken!</div>";
+            } else {
+                // Insert the account with 'technician' hardcoded as the structural role parameter
+                $insertStmt = $pdo->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, 'technician')");
+                $insertStmt->execute([$new_user, $new_pass]);
+                
+                $msg = "<div class='alert alert-success py-2 small'>Success: Technician account '<b>{$new_user}</b>' created successfully!</div>";
+            }
+        } catch (\PDOException $err) {
+            $msg = "<div class='alert alert-danger py-2 small'>Database Error: " . htmlspecialchars($err->getMessage()) . "</div>";
         }
     } else {
         $msg = "<div class='alert alert-warning py-2 small'>Please fill in all the required input fields.</div>";
     }
 }
+?>
+<?php
+// Note: Keeping the HTML structure exactly as you designed it
 ?>
 <!DOCTYPE html>
 <html lang="en">
