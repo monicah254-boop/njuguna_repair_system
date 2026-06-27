@@ -1,17 +1,14 @@
 <?php
 session_start();
+
+// 1. Hook into our working cloud database connection pipeline
+require_once 'db.php';
+
+// STRICT SECURITY GATE: Only allow logged-in Admins to access this page
 if (!isset($_SESSION['username']) || strtolower($_SESSION['role']) != 'admin') {
     header("Location: login.php");
     exit();
 }
-
-$host = 'localhost'; $db = 'njuguna_repair_dp_v2'; $user = 'root'; $pass = '';
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-    ]);
-} catch (\PDOException $e) { die("Database connection failed: " . $e->getMessage()); }
 
 $msg = "";
 
@@ -24,19 +21,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_stock'])) {
     $s_price = floatval($_POST['selling_price']);
 
     if (!empty($p_name) && !empty($serial)) {
-        // Find if the table uses 'quantity' or fallback tracking
-        $testStmt = $pdo->query("SELECT * FROM inventory LIMIT 1");
-        $rowSample = $testStmt->fetch();
-        
-        if ($rowSample && array_key_exists('quantity', $rowSample)) {
-            $stmt = $pdo->prepare("INSERT INTO inventory (part_name, serial_number, quantity, cost_price, selling_price) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$p_name, $serial, $qty, $c_price, $s_price]);
-        } else {
-            // Dynamic insertion ignoring quantity field if your template handles balances externally
-            $stmt = $pdo->prepare("INSERT INTO inventory (part_name, serial_number, cost_price, selling_price) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$p_name, $serial, $c_price, $s_price]);
+        try {
+            // Find if the table uses 'quantity' or fallback tracking
+            $testStmt = $pdo->query("SELECT * FROM inventory LIMIT 1");
+            $rowSample = $testStmt->fetch();
+            
+            if ($rowSample && array_key_exists('quantity', $rowSample)) {
+                $stmt = $pdo->prepare("INSERT INTO inventory (part_name, serial_number, quantity, cost_price, selling_price) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$p_name, $serial, $qty, $c_price, $s_price]);
+            } else {
+                // Dynamic insertion ignoring quantity field if your template handles balances externally
+                $stmt = $pdo->prepare("INSERT INTO inventory (part_name, serial_number, cost_price, selling_price) VALUES (?, ?, ?, ?)");
+                $stmt->execute([$p_name, $serial, $c_price, $s_price]);
+            }
+            $msg = "<div class='alert alert-success py-2 small'>New serialized item logged to inventory table successfully!</div>";
+        } catch (\PDOException $err) {
+            $msg = "<div class='alert alert-danger py-2 small'>Database Error: " . htmlspecialchars($err->getMessage()) . "</div>";
         }
-        $msg = "<div class='alert alert-success py-2 small'>New serialized item logged to inventory table successfully!</div>";
     } else {
         $msg = "<div class='alert alert-danger py-2 small'>Please fill in both the Part Name and Serial Number fields.</div>";
     }
@@ -115,20 +116,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['add_stock'])) {
                     </thead>
                     <tbody>
                         <?php
-                        $stmt = $pdo->query("SELECT * FROM inventory ORDER BY part_name ASC");
-                        while ($row = $stmt->fetch()) {
-                            // Dynamic safe mapping fallbacks to prevent errors across different schema configurations
-                            $qty = isset($row['quantity']) ? $row['quantity'] : 1;
-                            $serialCode = isset($row['serial_number']) ? $row['serial_number'] : 'N/A';
-                            
-                            echo "<tr>";
-                            echo "<td><b>#{$row['part_id']}</b></td>";
-                            echo "<td><span class='fw-semibold'>" . htmlspecialchars($row['part_name']) . "</span></td>";
-                            echo "<td><code class='text-primary fw-bold'>{$serialCode}</code></td>";
-                            echo "<td><b>{$qty}</b> units</td>";
-                            echo "<td class='text-muted'>Ksh " . number_format($row['cost_price'], 2) . "</td>";
-                            echo "<td><span class='fw-bold text-success'>Ksh " . number_format($row['selling_price'], 2) . "</span></td>";
-                            echo "</tr>";
+                        try {
+                            $stmt = $pdo->query("SELECT * FROM inventory ORDER BY part_name ASC");
+                            while ($row = $stmt->fetch()) {
+                                $qty = isset($row['quantity']) ? $row['quantity'] : 1;
+                                $serialCode = isset($row['serial_number']) ? $row['serial_number'] : 'N/A';
+                                
+                                echo "<tr>";
+                                echo "<td><b>#{$row['part_id']}</b></td>";
+                                echo "<td><span class='fw-semibold'>" . htmlspecialchars($row['part_name']) . "</span></td>";
+                                echo "<td><code class='text-primary fw-bold'>{$serialCode}</code></td>";
+                                echo "<td><b>{$qty}</b> units</td>";
+                                echo "<td class='text-muted'>Ksh " . number_format($row['cost_price'], 2) . "</td>";
+                                echo "<td><span class='fw-bold text-success'>Ksh " . number_format($row['selling_price'], 2) . "</span></td>";
+                                echo "</tr>";
+                            }
+                        } catch (\PDOException $e) {
+                            echo "<tr><td colspan='6' class='text-center text-muted small py-3'>No stock tracking items live. (Verify if 'inventory' table matches the cloud schema).</td></tr>";
                         }
                         ?>
                     </tbody>
