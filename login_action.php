@@ -1,28 +1,51 @@
 <?php
 session_start();
+
+// 1. Import our central cloud database handler (Replaces the local connection block)
 require_once 'db.php';
-// 1. Read connection variables from Render's environment (fallback to local XAMPP)
-$host = getenv('DB_HOST') ?: 'localhost';
-$port = getenv('DB_PORT') ?: '3306';
-$db   = getenv('DB_NAME') ?: 'defaultdb';
-$user = getenv('DB_USER') ?: 'root';
-$pass = getenv('DB_PASSWORD') ?: '';
 
-try {
-    $options = [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ];
-    
-    if (getenv('DB_HOST')) {
-        $options[PDO::MYSQL_ATTR_SSL_CA] = true;
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $username = trim($_POST['username']);
+    $password = trim($_POST['password']);
+
+    if (!empty($username) && !empty($password)) {
+        try {
+            // Query user directly matching both username and raw password string
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE username = ? AND password = ?');
+            $stmt->execute([$username, $password]);
+            $user = $stmt->fetch();
+
+            if ($user) {
+                $_SESSION['user_id'] = $user['user_id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['role'] = $user['role'];
+
+                $role = trim($user['role']);
+                if (strcasecmp($role, 'Admin') == 0) {
+                    header("Location: admin_dashboard.php");
+                    exit();
+                } else if (strcasecmp($role, 'Technician') == 0) {
+                    header("Location: tech-dashboard.php");
+                    exit();
+                } else {
+                    $_SESSION['error'] = "Role configuration mismatch.";
+                    header("Location: login.php");
+                    exit();
+                }
+            } else {
+                $_SESSION['error'] = "Invalid system credentials. Please try again.";
+                header("Location: login.php");
+                exit();
+            }
+        } catch (\PDOException $e) {
+            $_SESSION['error'] = "Database lookup failed: " . $e->getMessage();
+            header("Location: login.php");
+            exit();
+        }
+    } else {
+        $_SESSION['error'] = "Please fill in all fields.";
+        header("Location: login.php");
+        exit();
     }
-    
-    $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
-    $pdo = new PDO($dsn, $user, $pass, $options);
-
-} catch (\PDOException $e) {
-    die("Database connection failed: " . $e->getMessage());
 }
-
-// --- Rest of your original authentication post validation logic below ---
+?>
