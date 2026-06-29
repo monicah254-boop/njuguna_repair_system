@@ -32,7 +32,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['open_jobcard'])) {
             $sqlInsert = "INSERT INTO job_cards (customer_name, customer_phone, device_model, problem_description, allocated_part_id, status) VALUES (?, ?, ?, ?, ?, 'In Progress')";
             
             $stmt = $pdo->prepare($sqlInsert);
-            // If part_id is 0, pass NULL to respect the structural integer field
             $stmt->execute([$customer, $phone, $device, $issue_input, ($part_id > 0 ? $part_id : null)]);
             $msg = "<div class='alert alert-success py-2 small'>New Repair Job Card opened successfully and inventory logs updated!</div>";
         } catch (\PDOException $err) {
@@ -77,11 +76,19 @@ if (isset($_GET['close_id'])) {
             ];
 
             $ch = curl_init();
-            guess_and_set_curl_opts($ch, $url, $data, $apiKey);
+            
+            // Explicitly defining connection options here to prevent missing reference crashes
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Accept: application/json",
+                "ApiKey: " . $apiKey
+            ]);
 
             $response = curl_exec($ch);
             
-            // Catch network execution blocks instantly
             if (curl_errno($ch)) {
                 $curl_error = curl_error($ch);
                 $msg = "<div class='alert alert-danger py-2 small'>Server Connection Error: " . htmlspecialchars($curl_error) . "</div>";
@@ -101,18 +108,6 @@ if (isset($_GET['close_id'])) {
     } catch (\PDOException $err) {
         $msg = "<div class='alert alert-danger py-2 small'>Database Error: " . htmlspecialchars($err->getMessage()) . "</div>";
     }
-}
-
-// Helper function to bundle curl properties safely
-function guess_and_set_curl_opts($ch, $url, $data, $apiKey) {
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        "Accept: application/json",
-        "ApiKey: " . $apiKey
-    ]);
 }
 ?>
 <!DOCTYPE html>
