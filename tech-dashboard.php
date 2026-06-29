@@ -67,9 +67,9 @@ if (isset($_GET['close_id'])) {
             
             $sms_message = "Hello " . $c_name . ", your device (" . $d_model . ") has been successfully repaired and is ready for collection at Njuguna Electronics. Thank you!";
 
-            // --- AFRICA'S TALKING LIVE SMS GATEWAY INTEGRATION ---
+            // --- AFRICA'S TALKING SANDBOX SMS GATEWAY INTEGRATION ---
             $username = "sandbox"; 
-            $apiKey   = "atsk_7568c2ed76556ae8e4722ab09566b3a17dee150fb6a6a0324e8ca9a8b01404acfba3cd30"; 
+            $apiKey   = "atsk_9598814322e47fa8079e8b2754d049a0199877c19c22c927101b4cad0c8c6a9289771504"; 
 
             $url = "https://api.sandbox.africastalking.com/version1/messaging";
 
@@ -80,24 +80,17 @@ if (isset($_GET['close_id'])) {
             ];
 
             $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                "Accept: application/json",
-                "ApiKey: " . $apiKey
-            ]);
+            guess_and_set_curl_opts($ch, $url, $data, $apiKey);
 
             $response = curl_exec($ch);
             curl_close($ch);
 
             $msg = "
             <div class='alert alert-success py-3 shadow-sm text-start'>
-                <h6 class='fw-bold mb-1 text-success'><i class='bi bi-phone-vibrate'></i> Live SMS Dispatched via Africa's Talking Gateway!</h6>
+                <h6 class='fw-bold mb-1 text-success'><i class='bi bi-phone-vibrate'></i> Sandbox SMS Dispatched via Africa's Talking Gateway!</h6>
                 <div class='p-2 bg-white rounded border border-success font-monospace small text-dark'>
                     <b>Sent To:</b> " . $customer_phone . "<br>
-                    <b>Gateway Response Status:</b> Network Request Dispatched Successfully.<br>
+                    <b>Gateway Response Status:</b> Sandbox Router Dispatched Successfully.<br>
                     <b>Message Content:</b> " . $sms_message . "
                 </div>
             </div>";
@@ -105,6 +98,18 @@ if (isset($_GET['close_id'])) {
     } catch (\PDOException $err) {
         $msg = "<div class='alert alert-danger py-2 small'>Database Error: " . htmlspecialchars($err->getMessage()) . "</div>";
     }
+}
+
+// Helper function to bundle curl properties safely
+function guess_and_set_curl_opts($ch, $url, $data, $apiKey) {
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Accept: application/json",
+        "ApiKey: " . $apiKey
+    ]);
 }
 ?>
 <!DOCTYPE html>
