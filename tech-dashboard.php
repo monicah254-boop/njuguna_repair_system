@@ -67,11 +67,12 @@ if (isset($_GET['close_id'])) {
             
             $sms_message = "Hello " . $c_name . ", your device (" . $d_model . ") has been successfully repaired and is ready for collection at Njuguna Electronics. Thank you!";
 
-            // --- AFRICA'S TALKING SANDBOX SMS GATEWAY INTEGRATION ---
-            $username = "sandbox"; 
-            $apiKey   = "atsk_9598814322e47fa8079e8b2754d049a0199877c19c22c927101b4cad0c8c6a9289771504"; 
+            // --- AFRICA'S TALKING REAL LIVE PRODUCTION SMS GATEWAY ---
+            $username = "njugunarepair"; 
+            $apiKey   = "atsk_8a553fd6f9ed962f50cbc077fa6a2789d0193b70f0dccb4fa4e5094d73c419844500b52c"; 
 
-            $url = "https://api.sandbox.africastalking.com/version1/messaging";
+            // PRODUCTION URL (Removed the '.sandbox.' modifier)
+            $url = "https://api.africastalking.com/version1/messaging";
 
             $data = [
                 'username' => $username,
@@ -87,10 +88,10 @@ if (isset($_GET['close_id'])) {
 
             $msg = "
             <div class='alert alert-success py-3 shadow-sm text-start'>
-                <h6 class='fw-bold mb-1 text-success'><i class='bi bi-phone-vibrate'></i> Sandbox SMS Dispatched via Africa's Talking Gateway!</h6>
+                <h6 class='fw-bold mb-1 text-success'><i class='bi bi-phone-vibrate'></i> Live SMS Dispatched via Africa's Talking Gateway!</h6>
                 <div class='p-2 bg-white rounded border border-success font-monospace small text-dark'>
                     <b>Sent To:</b> " . $customer_phone . "<br>
-                    <b>Gateway Response Status:</b> Sandbox Router Dispatched Successfully.<br>
+                    <b>Gateway Response Status:</b> Production Network Request Dispatched Successfully.<br>
                     <b>Message Content:</b> " . $sms_message . "
                 </div>
             </div>";
